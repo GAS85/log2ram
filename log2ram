@@ -8,6 +8,7 @@ RAM_LOG=/var/log
 LOG_NAME="log2ram.log"
 LOG2RAM_LOG="${RAM_LOG}/${LOG_NAME}"
 LOG_OUTPUT="tee -a $LOG2RAM_LOG"
+treshold=85 # % - truncate trashlod
 
 isSafe () {
     [ -d $HDD_LOG/ ] || echo "ERROR: $HDD_LOG/ doesn't exist! Can't sync."
@@ -20,20 +21,10 @@ syncToDisk () {
     if [ "$USE_RSYNC" = true ]; then
         rsync -aXWv --delete --links $RAM_LOG/ $HDD_LOG/ 2>&1 | $LOG_OUTPUT
     else
-		if [ "$USE_PATCH" = true ]; then 
-			for entry in $(ls -t $RAM_LOG/)
-			do			
-				if [ ! -f "$HDD_LOG/$entry" ]; then
-					cat $RAM_LOG/$entry >> $HDD_LOG/$entry
-					echo /dev/null > $RAM_LOG/$entry
-				else
-					cp -rfup $RAM_LOG/$entry -T $HDD_LOG/ 2>&1 | $LOG_OUTPUT
-				fi
-			done
-		else
-			cp -rfup $RAM_LOG/ -T $HDD_LOG/ 2>&1 | $LOG_OUTPUT
-		fi
+		cp -rfup $RAM_LOG/ -T $HDD_LOG/ 2>&1 | $LOG_OUTPUT
     fi
+	
+	trancate
 }
 
 syncFromDisk () {
@@ -60,6 +51,21 @@ wait_for () {
     while ! grep -qs "$1" /proc/mounts; do
         sleep 0.1
     done
+}
+
+trancate () {
+
+	if [ $(df $RAM_LOG/ --output=pcent | tail -1 |cut -d "%" -f 1) -ge $treshold ]; then
+		for entry in $(ls -t $RAM_LOG/)
+		do			
+			if [ ! -f "$HDD_LOG/$entry" ]; then
+				cat $RAM_LOG/$entry >> $HDD_LOG/$entry
+			else
+				cp -rfup $RAM_LOG/$entry -T $HDD_LOG/ 2>&1 | $LOG_OUTPUT
+			fi
+			truncate --size 0 $RAM_LOG/$entry
+		done
+	fi
 }
 
 case "$1" in
